@@ -1,38 +1,122 @@
 .App {
   text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 .App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+  background: #282c34;
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.wallet-info {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+  justify-content: space-around;
+  margin-top: 10px;
+}
+
+.tabs {
+  display: flex;
+  margin-bottom: 20px;
+  background: #f5f5f5;
+  border-radius: 10px;
+  padding: 5px;
+}
+
+.tabs button {
+  flex: 1;
+  padding: 15px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.tabs button.active {
+  background: #007bff;
   color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.tab-content {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.action-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin: 10px;
+  font-size: 16px;
+}
+
+.action-btn:hover {
+  background: #0056b3;
+}
+
+.connect-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  margin: 20px;
+}
+
+input, select {
+  padding: 10px;
+  margin: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  width: 300px;
+  max-width: 100%;
+}
+
+.project-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 10px 0;
+  text-align: left;
+}
+
+.contract-addresses {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  text-align: left;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.market-section {
+  display: flex;
+  gap: 20px;
+}
+
+.sell-ticket, .buy-ticket {
+  flex: 1;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.create-project {
+  background: #e7f3ff;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
 }
