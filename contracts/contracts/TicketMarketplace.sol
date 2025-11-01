@@ -22,7 +22,7 @@ contract TicketMarketplace {
     // 核心：TokenID -> 挂单信息
     mapping(uint256 => Listing) public listings;
 
-    // --- 核心事件（前端聚合订单簿的关键） ---
+
     // 当挂单时，我们把彩票的“类别”也作为 indexed 参数，以便前端过滤
     event TicketListed(
         uint256 indexed tokenId,

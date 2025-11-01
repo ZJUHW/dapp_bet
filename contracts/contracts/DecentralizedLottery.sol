@@ -124,7 +124,7 @@ contract DecentralizedLottery is Ownable {
         LotteryTicket nft = LotteryTicket(ticketNftAddress);
         require(nft.ownerOf(tokenId) == msg.sender, "Not ticket owner");
         
-        // 修复：分别接收三个返回值
+        // 分别接收三个返回值
         (uint256 projectId, uint256 optionId, uint256 betAmount) = nft.ticketInfo(tokenId);
         Project storage project = projects[projectId];
 

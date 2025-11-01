@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, FormEvent } from 'react';
 import { ethers, Contract, parseEther, formatEther } from 'ethers';
-// 确保路径正确
 import { useWeb3, Web3Provider } from './contexts/Web3Context'; 
 import { GANACHE_CHAIN_ID } from './config'; // 导入 ChainID
 import { toast } from 'react-hot-toast';
@@ -57,75 +56,106 @@ const styles: { [key: string]: React.CSSProperties } = {
   item: { border: '1px solid #eee', background: 'white', padding: '10px', margin: '10px 0', borderRadius: '4px' },
   subItem: { borderTop: '1px dashed #ccc', margin: '10px 0', paddingTop: '10px' }
 };
-
 // --- 1. 头部组件 (连接 & 水龙头) ---
-const Header: React.FC = () => {
-  const { isConnected, connectWallet, account, betToken, lottery } = useWeb3();
-  const [oracleAddress, setOracleAddress] = useState('');
+// ✅ 1. 接收 onRefresh 和 refreshTrigger
+const Header: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ refreshTrigger, onRefresh }) => {
+  const { isConnected, connectWallet, account, betToken, lottery } = useWeb3();
+  const [oracleAddress, setOracleAddress] = useState('');
+  
+  // ✅ 2. 为余额添加新状态
+  const [balance, setBalance] = useState<string>('0');
 
-  // 检查当前账户是否是公证人
+  // 检查当前账户是否是公证人
+  useEffect(() => {
+    const checkOracle = async () => {
+      if (lottery) {
+        try {
+          const oracle = await lottery.oracle();
+          setOracleAddress(oracle);
+        } catch (e) {
+          console.error("无法获取公证人地址", e);
+        }
+      }
+    };
+    checkOracle();
+  }, [lottery, account]);
+
+  // 
   useEffect(() => {
-    const checkOracle = async () => {
-      if (lottery) {
+    const fetchBalance = async () => {
+      // 确保 betToken 和 account 都已加载
+      if (betToken && account) {
         try {
-          const oracle = await lottery.oracle();
-          setOracleAddress(oracle);
+          const balanceWei = await betToken.balanceOf(account);
+          setBalance(formatEther(balanceWei)); // 将 Wei 转换为 Ether 格式
         } catch (e) {
-          console.error("无法获取公证人地址", e);
+          console.error("无法获取 BET 余额", e);
+          setBalance('0');
         }
       }
     };
-    checkOracle();
-  }, [lottery, account]);
+    fetchBalance();
+    
+  // 依赖 refreshTrigger，这样全局刷新时余额也会更新
+  }, [account, betToken, refreshTrigger]); 
 
-  // 领取测试币
-  const handleGetFaucet = async () => {
-    if (!betToken) return toast.error('钱包未连接');
-    try {
-      const tx = await betToken.faucet();
-      toast.promise(tx.wait(), {
-        loading: '正在领取 1000 BET...',
-        success: '成功领取 1000 BET！',
-        error: (err) => {
-          // 处理 BetToken.sol 中的 require
-          if (err.message?.includes("You already have tokens")) {
-            return "你已经有代币了，无法重复领取。";
-          }
-          return '领取失败';
+  // 领取测试币
+  const handleGetFaucet = async () => {
+    if (!betToken) return toast.error('钱包未连接');
+    try {
+      const tx = await betToken.faucet();
+      toast.promise(tx.wait(), {
+        loading: '正在领取 1000 BET...',
+        // 4. 领取成功后，调用 onRefresh
+        success: (result) => {
+          onRefresh(); // 触发全局刷新，自动更新余额
+          return '成功领取 1000 BET！';
         },
-      });
-    } catch (e: any) {
-      console.error(e);
-      if (e.data?.message?.includes("You already have tokens") || e.message?.includes("You already have tokens")) {
-        toast.error("你已经有代币了，无法重复领取。");
-      } else {
-        toast.error('领取失败');
-      }
-    }
-  };
+        error: (err) => {
+          // 处理 BetToken.sol 中的 require
+          if (err.message?.includes("You already have tokens")) {
+            return "你已经有代币了，无法重复领取。";
+          }
+          return '领取失败';
+        },
+      });
+    } catch (e: any) {
+      console.error(e);
+      if (e.data?.message?.includes("You already have tokens") || e.message?.includes("You already have tokens")) {
+        toast.error("你已经有代币了，无法重复领取。");
+      } else {
+        toast.error('领取失败');
+      }
+    }
+  };
 
-  return (
-    <div style={styles.header}>
-      <h2>去中心化彩票 - 超级控制台</h2>
-      <div>
-        {isConnected ? (
-          <>
-            <button onClick={handleGetFaucet} style={styles.button}>
-              领取 BET
-            </button>
-            <span style={{ marginLeft: '15px' }}>
-              {account?.substring(0, 6)}...{account?.substring(account.length - 4)}
-              {account?.toLowerCase() === oracleAddress.toLowerCase() && ' (公证人)'}
+  return (
+    <div style={styles.header}>
+      <h2>去中心化彩票 - 超级控制台</h2>
+      <div>
+        {isConnected ? (
+          <>
+            <button onClick={handleGetFaucet} style={styles.button}>
+              领取 BET
+            </button>
+            {/* ✅ 5. 在 span 中显示余额 */}
+            <span style={{ marginLeft: '15px', fontWeight: 'bold' }}>
+              {/* toFixed(2) 保留两位小数 */}
+              {parseFloat(balance).toFixed(2)} BET
             </span>
-          </>
-        ) : (
-          <button onClick={connectWallet} style={styles.button}>
-            连接钱包
-          </button>
-        )}
-      </div>
-    </div>
-  );
+            <span style={{ marginLeft: '15px' }}>
+              {account?.substring(0, 6)}...{account?.substring(account.length - 4)}
+              {account?.toLowerCase() === oracleAddress.toLowerCase() && ' (公证人)'}
+            </span>
+          </>
+        ) : (
+          <button onClick={connectWallet} style={styles.button}>
+            连接钱包
+          </button>
+        )}
+      </div>
+    </div>
+  );
 };
 
 // --- 2. 公证人面板 ---
@@ -349,7 +379,7 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
     
     try {
       // 方法1：通过事件查询（推荐）
-      const filter = lotteryTicket.filters.Transfer(ethers.ZeroAddress, account);
+      const filter = lotteryTicket.filters.Transfer(null, account);
       const mintEvents = await lotteryTicket.queryFilter(filter, 0, 'latest');
       
       const ticketPromises = mintEvents.map(async (event: any) => {
@@ -608,21 +638,10 @@ function AppContent() {
     setRefreshTrigger(t => t + 1);
   }
   
-  if (!isConnected) {
-    return (
-      <div style={styles.container}>
-        <Header />
-        <div style={styles.section}>
-          <h2>请先连接你的钱包</h2>
-          <p>请确保你已连接到 Ganache 网络 (ChainID: {parseInt(GANACHE_CHAIN_ID, 16)})</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={styles.container}>
-      <Header />
+      <Header refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
       <button 
         style={{...styles.button, background: '#28a745', width: '100%', padding: '15px', fontSize: '1.2em'}}
         onClick={triggerRefresh}

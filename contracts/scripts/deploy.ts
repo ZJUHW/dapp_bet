@@ -14,8 +14,8 @@ async function main() {
     // 3. 部署 TicketMarketplace (DEX)
     const TicketMarketplace = await hre.ethers.getContractFactory("TicketMarketplace");
     const marketplace = await TicketMarketplace.deploy(
-        betToken.address,      // 直接使用 .address
-        lotteryTicket.address  // 直接使用 .address
+        betToken.address,      
+        lotteryTicket.address  
     );
     console.log("Marketplace deployed to:", marketplace.address);
 
@@ -33,12 +33,12 @@ async function main() {
     await tx.wait();
     console.log("LotteryTicket contract authorized.");
 
-    // (可选) 部署者（公证人）先给自己mint一些BET
+    // 查询一下余额,应该会直接给部署者钱
     const [deployer] = await hre.ethers.getSigners();
     const deployerBalance = await betToken.balanceOf(deployer.address);
     console.log("Deployer balance:", ethers.utils.formatEther(deployerBalance), "BET");
 
-    console.log("🎉 所有合约部署完成！");
+    console.log("🎉所有合约部署完成！");
     console.log("==================================");
     console.log("BetToken:", betToken.address);
     console.log("LotteryTicket:", lotteryTicket.address);

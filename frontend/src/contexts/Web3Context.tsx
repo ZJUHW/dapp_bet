@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { ethers, BrowserProvider, Signer, Contract } from 'ethers';
-// 确保你的 config.ts 路径正确
 import { addresses, abis, GANACHE_CHAIN_ID } from '../config'; 
 import { Toaster, toast } from 'react-hot-toast';
 declare global {
