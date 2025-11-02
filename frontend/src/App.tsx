@@ -532,7 +532,6 @@ const OrderBook: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
           }
           
           // 5. 检查该 tokenId 是否还在售
-          // (await 确保此检查在下一步之前完成)
           const currentListing = await marketplace.listings(tokenId);
           if (currentListing.price === 0n) {
              continue; // 已售出或取消
@@ -541,7 +540,15 @@ const OrderBook: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
           if (currentListing.price !== price) {
              continue;
           }
-
+          // 检查这个 NFT 是否还存在
+          try {
+              // 我们尝试获取 owner。如果 NFT 被销毁了，
+              await lotteryTicket.ownerOf(tokenId);
+          } catch (ownerError) {
+              //  NFT 已被销毁 (卖家已兑奖)
+              console.warn(`过滤掉僵尸挂单: Token ID ${tokenId} 已被销毁`);
+              continue; 
+          }
           // 6. 获取 betAmount，这是聚合的关键！
           const info = await lotteryTicket.ticketInfo(tokenId);
           const betAmount = info.betAmount;
