@@ -13,10 +13,10 @@ export const GANACHE_CHAIN_ID = '0x539';
 
 // 3. 粘贴你刚刚部署的新地址
 export const addresses = {
-    betToken: "0x3Ee127e79cdD19a4Cd5F4a7a6f1d74111C96E3f2",
-    lotteryTicket: "0xb6BF103141694d0Ac2421D49c11E3c44e94f9E98",
-    marketplace: "0x8ae6D60466B252D1D572f9C2469Ff10948153894",
-    lottery: "0x9807C64B361cb6004885465b85a422768Cae8040"
+    betToken: "0x03feEB2177CDab4417Ee6fD8701b5d0b0782F5f4",
+    lotteryTicket: "0xf2D9c6C659579baAf6D301eB13Ed2d5525D51097",
+    marketplace: "0x839aDBa51C33697bc59e15f1193e41B4d6354052",
+    lottery: "0x170d1ACBd046ACd4502E481AE95e97362772BE18"
 };
 
 // 4. 提取 ABIs

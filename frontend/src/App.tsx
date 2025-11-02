@@ -35,14 +35,25 @@ interface MyTicket {
   listingPrice: bigint;
 }
 
-interface Listing {
-  tokenId: bigint;
+// 替换 'Listing' 接口为新的聚合结构
+interface PriceLevel {
+  price: bigint;
+  tokenIds: bigint[]; // 所有在此价格出售的 tokenIds
+  count: number;
+}
+
+interface AggregatedListing {
+  key: string; // 唯一的聚合 Key (project-option-betAmount)
   projectId: bigint;
   optionId: bigint;
-  seller: string;
-  price: bigint;
+  betAmount: bigint;
+  
+  // 显示名称
   projectName: string;
   optionName: string;
+  
+  // 聚合后的订单簿
+  priceLevels: PriceLevel[]; 
 }
 
 // --- 简单样式 ---
@@ -54,18 +65,19 @@ const styles: { [key: string]: React.CSSProperties } = {
   button: { cursor: 'pointer', background: '#007bff', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', margin: '5px' },
   input: { padding: '8px', margin: '5px', border: '1px solid #ccc', borderRadius: '4px' },
   item: { border: '1px solid #eee', background: 'white', padding: '10px', margin: '10px 0', borderRadius: '4px' },
-  subItem: { borderTop: '1px dashed #ccc', margin: '10px 0', paddingTop: '10px' }
+  subItem: { borderTop: '1px dashed #ccc', margin: '10px 0', paddingTop: '10px' },
+  //为新的订单簿添加样式
+  orderBookGroup: { border: '1px solid #007bff', background: 'white', padding: '15px', margin: '15px 0', borderRadius: '8px' },
+  orderBookHeader: { fontSize: '1.2em', fontWeight: 'bold', marginBottom: '10px' },
+  priceLevelRow: { display: 'flex', justifyContent: 'space-between', padding: '5px', borderBottom: '1px solid #f0f0f0' }
 };
-// --- 1. 头部组件 (连接 & 水龙头) ---
-// ✅ 1. 接收 onRefresh 和 refreshTrigger
+
+// 连接 & 水龙头
 const Header: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ refreshTrigger, onRefresh }) => {
   const { isConnected, connectWallet, account, betToken, lottery } = useWeb3();
   const [oracleAddress, setOracleAddress] = useState('');
-  
-  // ✅ 2. 为余额添加新状态
   const [balance, setBalance] = useState<string>('0');
 
-  // 检查当前账户是否是公证人
   useEffect(() => {
     const checkOracle = async () => {
       if (lottery) {
@@ -80,14 +92,12 @@ const Header: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ r
     checkOracle();
   }, [lottery, account]);
 
-  // 
   useEffect(() => {
     const fetchBalance = async () => {
-      // 确保 betToken 和 account 都已加载
       if (betToken && account) {
         try {
           const balanceWei = await betToken.balanceOf(account);
-          setBalance(formatEther(balanceWei)); // 将 Wei 转换为 Ether 格式
+          setBalance(formatEther(balanceWei));
         } catch (e) {
           console.error("无法获取 BET 余额", e);
           setBalance('0');
@@ -95,24 +105,19 @@ const Header: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ r
       }
     };
     fetchBalance();
-    
-  // 依赖 refreshTrigger，这样全局刷新时余额也会更新
   }, [account, betToken, refreshTrigger]); 
 
-  // 领取测试币
   const handleGetFaucet = async () => {
     if (!betToken) return toast.error('钱包未连接');
     try {
       const tx = await betToken.faucet();
       toast.promise(tx.wait(), {
         loading: '正在领取 1000 BET...',
-        // 4. 领取成功后，调用 onRefresh
         success: (result) => {
-          onRefresh(); // 触发全局刷新，自动更新余额
+          onRefresh(); 
           return '成功领取 1000 BET！';
         },
         error: (err) => {
-          // 处理 BetToken.sol 中的 require
           if (err.message?.includes("You already have tokens")) {
             return "你已经有代币了，无法重复领取。";
           }
@@ -138,9 +143,7 @@ const Header: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ r
             <button onClick={handleGetFaucet} style={styles.button}>
               领取 BET
             </button>
-            {/* ✅ 5. 在 span 中显示余额 */}
             <span style={{ marginLeft: '15px', fontWeight: 'bold' }}>
-              {/* toFixed(2) 保留两位小数 */}
               {parseFloat(balance).toFixed(2)} BET
             </span>
             <span style={{ marginLeft: '15px' }}>
@@ -158,7 +161,7 @@ const Header: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ r
   );
 };
 
-// --- 2. 公证人面板 ---
+// 公证人面板 
 const AdminPanel: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
   const { lottery, betToken } = useWeb3();
   const [name, setName] = useState('');
@@ -172,7 +175,6 @@ const AdminPanel: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
     setOptions(newOptions);
   };
 
-  // 创建项目
   const handleCreateProject = async (e: FormEvent) => {
     e.preventDefault();
     if (!lottery || !betToken) return toast.error('钱包未连接');
@@ -181,19 +183,14 @@ const AdminPanel: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
     const loadingToast = toast.loading('正在处理...');
     try {
       const amountWei = parseEther(poolAmount);
-
-      // 步骤1: 授权
       toast.loading('请授权 BET...', { id: loadingToast });
       const approveTx = await betToken.approve(await lottery.getAddress(), amountWei);
       await approveTx.wait();
-
-      // 步骤2: 创建
       toast.loading('正在创建项目...', { id: loadingToast });
       const createTx = await lottery.createProject(name, options, amountWei);
       await createTx.wait();
-
       toast.success('项目创建成功！', { id: loadingToast });
-      onRefresh(); // 触发全局刷新
+      onRefresh(); 
     } catch (e: any) {
       console.error(e);
       toast.error(e.data?.message || e.message || '创建失败', { id: loadingToast });
@@ -223,41 +220,33 @@ const AdminPanel: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
   );
 };
 
-// --- 3. 项目列表 & 交互 ---
+//项目列表 & 交互 
 const ProjectList: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ refreshTrigger, onRefresh }) => {
   const { lottery, betToken } = useWeb3();
   const [projects, setProjects] = useState<Project[]>([]);
   const [betAmounts, setBetAmounts] = useState<{ [key: string]: string }>({});
 
-  // 获取所有项目数据
   useEffect(() => {
     const fetchProjects = async () => {
       if (!lottery) return;
       try {
         const nextId = await lottery.nextProjectId();
         const projectPromises: Promise<Project>[] = [];
-
         for (let i = 0; i < nextId; i++) {
           projectPromises.push(
             (async () => {
-              // 1. 调用你新的 getProjectInfo 函数
               const pInfo = await lottery.getProjectInfo(i);
-              const optionCount = pInfo.optionCount; // 这是一个 BigInt
-
-              // 2. 循环获取每个 Option
+              const optionCount = pInfo.optionCount;
               const optionsPromises: Promise<Option>[] = [];
               for (let j = 0; j < optionCount; j++) {
-                // 调用你新的 getProjectOption 函数
                 optionsPromises.push(lottery.getProjectOption(i, j));
               }
               const optionsResults = await Promise.all(optionsPromises);
-
               const fetchedOptions: Option[] = optionsResults.map(opt => ({
                 name: opt.name,
                 totalBetAmount: opt.totalBetAmount
               }));
               
-              // 3. 组合数据
               return {
                 id: i,
                 name: pInfo.name,
@@ -272,16 +261,15 @@ const ProjectList: React.FC<{ refreshTrigger: number, onRefresh: () => void }> =
           );
         }
         const resolvedProjects = await Promise.all(projectPromises);
-        setProjects(resolvedProjects.reverse()); // 最近的在最上面
+        setProjects(resolvedProjects.reverse());
       } catch (e) {
         console.error("获取项目失败:", e);
         toast.error('获取项目失败。');
       }
     };
     fetchProjects();
-  }, [lottery, refreshTrigger]); // 依赖 refreshTrigger 来刷新
+  }, [lottery, refreshTrigger]); 
 
-  // 处理下注
   const handleBet = async (projectId: number, optionId: number) => {
     if (!lottery || !betToken) return toast.error('钱包未连接');
     const amount = betAmounts[`${projectId}-${optionId}`] || '0';
@@ -290,26 +278,21 @@ const ProjectList: React.FC<{ refreshTrigger: number, onRefresh: () => void }> =
     const loadingToast = toast.loading('正在处理下注...');
     try {
       const amountWei = parseEther(amount);
-      // 1. 授权
       toast.loading('请授权 BET...', { id: loadingToast });
       const approveTx = await betToken.approve(await lottery.getAddress(), amountWei);
       await approveTx.wait();
-
-      // 2. 下注
       toast.loading('正在下注...', { id: loadingToast });
       const betTx = await lottery.bet(projectId, optionId, amountWei);
       await betTx.wait();
-
       toast.success('下注成功！', { id: loadingToast });
       setBetAmounts(prev => ({ ...prev, [`${projectId}-${optionId}`]: '' }));
-      onRefresh(); // 刷新
+      onRefresh(); 
     } catch (e: any) {
       console.error(e);
       toast.error(e.data?.message || e.message || '下注失败', { id: loadingToast });
     }
   };
 
-  // 处理结算
   const handleResolve = async (projectId: number, winningOptionId: number) => {
     if (!lottery) return toast.error('钱包未连接');
     const loadingToast = toast.loading('正在结算...');
@@ -317,7 +300,7 @@ const ProjectList: React.FC<{ refreshTrigger: number, onRefresh: () => void }> =
       const tx = await lottery.resolveProject(projectId, winningOptionId);
       await tx.wait();
       toast.success('项目已结算！', { id: loadingToast });
-      onRefresh(); // 刷新
+      onRefresh(); 
     } catch (e: any) {
       console.error(e);
       toast.error(e.data?.message || e.message || '结算失败', { id: loadingToast });
@@ -365,7 +348,7 @@ const ProjectList: React.FC<{ refreshTrigger: number, onRefresh: () => void }> =
   );
 };
 
-// --- 4. 我的彩票 (NFTs) ---
+//  我的彩票 
 const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ refreshTrigger, onRefresh }) => {
   const { lotteryTicket, marketplace, lottery, account } = useWeb3();
   const [tickets, setTickets] = useState<MyTicket[]>([]);
@@ -378,18 +361,15 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
     setTickets([]);
     
     try {
-      // 方法1：通过事件查询（推荐）
       const filter = lotteryTicket.filters.Transfer(null, account);
       const mintEvents = await lotteryTicket.queryFilter(filter, 0, 'latest');
       
       const ticketPromises = mintEvents.map(async (event: any) => {
         try {
           const tokenId = event.args.tokenId;
-          
-          // 检查当前所有者是否还是这个账户
           const currentOwner = await lotteryTicket.ownerOf(tokenId);
           if (currentOwner.toLowerCase() !== account.toLowerCase()) {
-            return null; // NFT 已经转移
+            return null; 
           }
           
           const info = await lotteryTicket.ticketInfo(tokenId);
@@ -434,18 +414,14 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
     const loadingToast = toast.loading('正在处理挂单...');
     try {
       const priceWei = parseEther(price);
-      // 1. 授权 NFT
       toast.loading('请授权 NFT...', { id: loadingToast });
       const approveTx = await lotteryTicket.approve(await marketplace.getAddress(), tokenId);
       await approveTx.wait();
-
-      // 2. 挂单
       toast.loading('正在挂单...', { id: loadingToast });
       const listTx = await marketplace.listTicket(tokenId, priceWei);
       await listTx.wait();
-
       toast.success('挂单成功！', { id: loadingToast });
-      onRefresh(); // 刷新
+      onRefresh(); 
     } catch (e: any) {
       console.error(e);
       toast.error(e.data?.message || e.message || '挂单失败', { id: loadingToast });
@@ -460,7 +436,7 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
       const tx = await marketplace.cancelListing(tokenId);
       await tx.wait();
       toast.success('取消成功！', { id: loadingToast });
-      onRefresh(); // 刷新
+      onRefresh(); 
     } catch (e: any) {
       console.error(e);
       toast.error(e.data?.message || e.message || '取消失败', { id: loadingToast });
@@ -475,7 +451,7 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
       const tx = await lottery.claimWinnings(tokenId); 
       await tx.wait();
       toast.success('兑奖成功！', { id: loadingToast });
-      onRefresh(); // 刷新
+      onRefresh(); 
     } catch (e: any) {
       console.error(e);
       toast.error(e.data?.message || e.message || '兑奖失败', { id: loadingToast });
@@ -496,7 +472,6 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
             原始下注: {formatEther(t.betAmount)} BET
           </p>
           
-          {/* 状态 */}
           {t.isResolved ? (
             t.isWinning ? (
               <button style={styles.button} onClick={() => handleClaim(t.tokenId)}>
@@ -506,7 +481,6 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
               <span>未中奖</span>
             )
           ) : t.listingPrice > 0n ? (
-            // 正在挂单
             <>
               <span>正在出售: {formatEther(t.listingPrice)} BET</span>
               <button style={styles.button} onClick={() => handleCancelListing(t.tokenId)}>
@@ -514,7 +488,6 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
               </button>
             </>
           ) : (
-            // 未挂单
             <>
               <input type="number" placeholder="出售价格 (BET)" style={styles.input} onChange={(e) => setListPrices(p => ({ ...p, [t.tokenId.toString()]: e.target.value }))} />
               <button style={styles.button} onClick={() => handleListTicket(t.tokenId)}>
@@ -530,60 +503,116 @@ const MyTickets: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
 
 // --- 5. 订单簿 (市场) ---
 const OrderBook: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = ({ refreshTrigger, onRefresh }) => {
-  const { marketplace, betToken, lottery, account } = useWeb3();
-  const [listings, setListings] = useState<Listing[]>([]);
+  const { marketplace, betToken, lottery, lotteryTicket, account } = useWeb3();
+  
+  const [aggregatedListings, setAggregatedListings] = useState<AggregatedListing[]>([]);
 
   useEffect(() => {
     const fetchListings = async () => {
-      if (!marketplace || !lottery) return;
+      // 确保所有合约都已加载
+      if (!marketplace || !lottery || !account || !lotteryTicket) return;
 
-      // 1. 获取所有 TicketListed 事件
+
+      // Key: "${projectId}-${optionId}-${betAmount}"
+      // Value: AggregatedListing
+      const aggregator = new Map<string, AggregatedListing>();
+
+      // 2. 获取所有 TicketListed 事件
       const filter = marketplace.filters.TicketListed();
       const events = await marketplace.queryFilter(filter, 0, 'latest');
       
-      const listingPromises: Promise<Listing | null>[] = [];
 
       for (const event of (events as any[])) {
         const { tokenId, projectId, optionId, seller, price } = event.args;
 
-        listingPromises.push(
-          (async () => {
-            try {
-              // 2. 检查该 tokenId 是否还在售
-              const currentListing = await marketplace.listings(tokenId);
-              if (currentListing.price === 0n ||currentListing.seller.toLowerCase() === account?.toLowerCase()) {
-                 return null; // 已售出/取消 或 是自己的挂单
-              }
-              
-              // 3. 获取项目和选项名称 (使用新函数)
-              const projectInfo = await lottery.getProjectInfo(projectId);
-              const optionInfo = await lottery.getProjectOption(projectId, optionId);
-              
-              return {
-                tokenId: tokenId, projectId: projectId, optionId: optionId, seller: seller, price: price,
-                projectName: projectInfo.name, 
-                optionName: optionInfo.name,
-              };
-            } catch (e) {
-              console.error(e);
-              return null;
-            }
-          })()
-        );
+        try {
+          // 4. 检查是否是自己的挂单
+          if (seller.toLowerCase() === account.toLowerCase()) {
+             continue; // 是自己的挂单，跳到下一个 event
+          }
+          
+          // 5. 检查该 tokenId 是否还在售
+          // (await 确保此检查在下一步之前完成)
+          const currentListing = await marketplace.listings(tokenId);
+          if (currentListing.price === 0n) {
+             continue; // 已售出或取消
+          }
+          // 确保事件价格和当前挂单价格一致
+          if (currentListing.price !== price) {
+             continue;
+          }
+
+          // 6. 获取 betAmount，这是聚合的关键！
+          const info = await lotteryTicket.ticketInfo(tokenId);
+          const betAmount = info.betAmount;
+
+          // 7. 创建唯一的聚合 Key
+          const key = `${projectId}-${optionId}-${betAmount}`;
+
+          // 8. 检查此聚合组是否已存在
+          if (!aggregator.has(key)) {
+            // 如果不存在，创建新组 (需要 await 来获取名称)
+            const projectInfo = await lottery.getProjectInfo(projectId);
+            const optionInfo = await lottery.getProjectOption(projectId, optionId);
+            
+            aggregator.set(key, {
+              key: key,
+              projectId: projectId,
+              optionId: optionId,
+              betAmount: betAmount,
+              projectName: projectInfo.name,
+              optionName: optionInfo.name,
+              priceLevels: [], // 初始化为空
+            });
+          }
+
+          // 9. 将此 tokenId 添加到其聚合组
+          const group = aggregator.get(key)!; // 我们知道它现在一定存在
+
+          // 查找此价格水平是否已存在
+          let priceLevel = group.priceLevels.find(p => p.price === price);
+
+          if (!priceLevel) {
+            // 如果此价格水平不存在，创建它
+            priceLevel = { price: price, tokenIds: [], count: 0 };
+            group.priceLevels.push(priceLevel);
+          }
+
+          // 添加 tokenId 并增加计数
+          priceLevel.tokenIds.push(tokenId);
+          priceLevel.count++;
+
+        } catch (e) {
+          console.error("处理挂单事件时出错:", e);
+          // 继续处理下一个 event
+        }
+      } // 串行循环结束
+      
+      // 10. 将 Map 转换为数组
+      const allListings = Array.from(aggregator.values());
+      
+
+      // 首先，按项目ID对外部组进行排序 (可选)
+      allListings.sort((a, b) => Number(a.projectId) - Number(b.projectId));
+      
+      // 对每个组内部的 priceLevels 按价格升序排序
+      for (const group of allListings) {
+        //  使用正确的 bigint 排序
+        group.priceLevels.sort((a, b) => {
+          if (a.price < b.price) return -1; // a (低价) 在前
+          if (a.price > b.price) return 1;  // b (低价) 在前
+          return 0;
+        });
       }
-      
-      let allListings = (await Promise.all(listingPromises)).filter(l => l !== null) as Listing[];
-      
-      // 4. 按价格排序
-      allListings.sort((a, b) => Number(a.price) - Number(b.price));
-      setListings(allListings);
+
+      setAggregatedListings(allListings);
     };
 
     fetchListings();
-  }, [marketplace, lottery, account, refreshTrigger]);
+  }, [marketplace, lottery, lotteryTicket, account, refreshTrigger]);
 
   // 购买彩票
-  const handleBuy = async (tokenId: bigint, price: bigint) => {
+  const handleBuy = async (tokenToBuy: bigint, price: bigint) => {
     if (!marketplace || !betToken) return toast.error('钱包未连接');
     
     const loadingToast = toast.loading('正在处理购买...');
@@ -595,7 +624,8 @@ const OrderBook: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
 
       // 2. 购买
       toast.loading('正在购买 NFT...', { id: loadingToast });
-      const buyTx = await marketplace.buyTicket(tokenId);
+      // 购买此价格水平的第一个可用 tokenId
+      const buyTx = await marketplace.buyTicket(tokenToBuy);
       await buyTx.wait();
 
       toast.success('购买成功！', { id: loadingToast });
@@ -609,32 +639,52 @@ const OrderBook: React.FC<{ refreshTrigger: number, onRefresh: () => void }> = (
   return (
     <div style={styles.section}>
       <h3 style={styles.sectionTitle}>彩票市场 (订单簿)</h3>
-      {listings.length === 0 ? (
+      {aggregatedListings.length === 0 ? (
         <p>市场暂无挂单</p>
       ) : (
-        listings.map(l => (
-          <div key={l.tokenId.toString()} style={styles.item}>
-            <p><strong>{l.projectName} - {l.optionName}</strong> (Token ID: {l.tokenId.toString()})</p>
-            <p>价格: <strong>{formatEther(l.price)} BET</strong></p>
-            <p><small>卖家: {l.seller}</small></p>
-            <button style={styles.button} onClick={() => handleBuy(l.tokenId, l.price)}>
-              购买
-            </button>
+        aggregatedListings.map(group => (
+          // 外部循环：每个 "聚合彩票"
+          <div key={group.key} style={styles.orderBookGroup}>
+            <div style={styles.orderBookHeader}>
+              {group.projectName} - {group.optionName}
+            </div>
+            <p>
+              <strong>原始赌注: {formatEther(group.betAmount)} BET</strong>
+            </p>
+            
+            {/* 内部循环：每个 "价格水平" */}
+            <div style={{...styles.subItem, padding: '5px'}}>
+              <div style={{...styles.priceLevelRow, fontWeight: 'bold'}}>
+                <span>价格 (BET)</span>
+                <span>数量</span>
+                <span>操作</span>
+              </div>
+              {group.priceLevels.map(level => (
+                <div key={level.price.toString()} style={styles.priceLevelRow}>
+                  <span>{formatEther(level.price)}</span>
+                  <span>{level.count}</span>
+                  <button 
+                    style={{...styles.button, margin: 0, padding: '4px 8px'}} 
+                    // 默认购买此价格水平的第一个 tokenId (FIFO)
+                    onClick={() => handleBuy(level.tokenIds[0], level.price)}
+                  >
+                    购买
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         ))
       )}
     </div>
   );
 };
-
-
-// --- 主应用 ---
+//  主应用 
 function AppContent() {
   const { isConnected } = useWeb3();
-  // 这个 state 用于触发子组件刷新
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const triggerRefresh = () => {
-    console.log("刷新按钮被点击! 触发器 +1"); // <--- 添加这一行
+    console.log("刷新按钮被点击! 触发器 +1"); 
     setRefreshTrigger(t => t + 1);
   }
   
@@ -642,32 +692,34 @@ function AppContent() {
   return (
     <div style={styles.container}>
       <Header refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
-      <button 
-        style={{...styles.button, background: '#28a745', width: '100%', padding: '15px', fontSize: '1.2em'}}
-        onClick={triggerRefresh}
-      >
-        🔄 手动刷新所有数据
-      </button>
-      
-      {/* 1. 公证人面板 */}
-      <AdminPanel onRefresh={triggerRefresh} />
-      
-      {/* 2. 项目列表 (下注 & 结算) */}
-      <ProjectList refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
-      
-      {/* 3. 我的彩票 (挂单 & 兑奖) */}
-      <MyTickets refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
-      
-      {/* 4. 订单簿 (购买) */}
-      <OrderBook refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
+
+      {!isConnected ? (
+        <div style={styles.section}>
+            <h2>请先连接你的钱包</h2>
+            <p>请确保你已连接到 Ganache/Hardhat 网络 (ChainID: {parseInt(GANACHE_CHAIN_ID, 16)})</p>
+        </div>
+      ) : (
+        <>
+          <button 
+            style={{...styles.button, background: '#28a745', width: '100%', padding: '15px', fontSize: '1.2em'}}
+            onClick={triggerRefresh}
+          >
+            🔄 手动刷新所有数据
+          </button>
+          
+          <AdminPanel onRefresh={triggerRefresh} />
+          <ProjectList refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
+          <MyTickets refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
+          <OrderBook refreshTrigger={refreshTrigger} onRefresh={triggerRefresh} />
+        </>
+      )}
     </div>
   );
 }
 
-// --- 最终导出 ---
+
 function App() {
   return (
-    // 确保 Web3Provider 包裹了你的应用
     <Web3Provider>
       <AppContent />
     </Web3Provider>
